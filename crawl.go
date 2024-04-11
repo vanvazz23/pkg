@@ -13,31 +13,38 @@ import (
 	"github.com/headzoo/surf/browser"
 )
 
-type Options struct {
-	TimeoutMillisecond int64
-	SleepMillisecond   int64
-	URL                string
-	IgnoreQueries      bool
-	Depth              int
-	LimitUrls          int
-	LimitEmails        int
-	WriteToFile        string
+// StringInSlice checks if a string exists in a slice
+func StringInSlice(str string, list []string) bool {
+	for _, v := range list {
+		if v == str {
+			return true
+		}
+	}
+	return false
 }
 
-type Option func(*Options) error
+// IsAnAsset checks if a URL points to a static asset
+func IsAnAsset(url string) bool {
+	commonAssetExtensions := []string{".pdf", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".css", ".js", ".ico", ".pdf"}
+	for _, ext := range commonAssetExtensions {
+		if strings.HasSuffix(url, ext) {
+			return true
+		}
+	}
+	return false
+}
 
+// HTTPChallenge represents a HTTP challenge
 type HTTPChallenge struct {
-	browse *browser.Browser
-
-	urls             []string
-	Emails           []string
+	browser        *browser.Browser
+	urls           []string
+	Emails         []string
 	TotalURLsCrawled int
-	TotalURLsFound   int
-	options          *Options
+	TotalURLsFound int
+	options        *Options
 }
 
-var emailWriterChan chan string // Declare a channel to write emails
-
+// NewHTTPChallenge creates a new HTTPChallenge instance
 func NewHTTPChallenge(opts ...Option) *HTTPChallenge {
 	opt := &Options{}
 	for _, o := range opts {
@@ -50,30 +57,13 @@ func NewHTTPChallenge(opts ...Option) *HTTPChallenge {
 	b.SetUserAgent("Go/email_extractor")
 	b.SetTimeout(time.Duration(opt.TimeoutMillisecond) * time.Millisecond)
 
-	// Initialize the emailWriterChan
-	emailWriterChan = make(chan string)
-
 	return &HTTPChallenge{
-		browse:  b,
+		browser: b,
 		options: opt,
 	}
 }
 
-func (hc *HTTPChallenge) StartEmailWriter() {
-	// Create a goroutine to write emails to file
-	go func() {
-		for {
-			select {
-			case email := <-emailWriterChan:
-				err := WriteToFile([]string{email}, hc.options.WriteToFile)
-				if err != nil {
-					color.Danger.Printf("Error writing email to file: %s\n", err)
-				}
-			}
-		}
-	}()
-}
-
+// CrawlRecursiveParallel recursively crawls URLs in parallel
 func (hc *HTTPChallenge) CrawlRecursiveParallel(url string, wg *sync.WaitGroup) *HTTPChallenge {
 	defer wg.Done()
 	urls := hc.Crawl(url)
@@ -110,6 +100,7 @@ func (hc *HTTPChallenge) CrawlRecursiveParallel(url string, wg *sync.WaitGroup) 
 	return hc
 }
 
+// CrawlRecursive crawls URLs recursively
 func (hc *HTTPChallenge) CrawlRecursive(url string) *HTTPChallenge {
 	urls := hc.Crawl(url)
 
@@ -132,8 +123,8 @@ func (hc *HTTPChallenge) CrawlRecursive(url string) *HTTPChallenge {
 	return hc
 }
 
+// Crawl crawls a single URL
 func (hc *HTTPChallenge) Crawl(url string) []string {
-	// check if url doesn't end with pdf, png or jpg
 	if IsAnAsset(url) {
 		return []string{}
 	}
@@ -145,7 +136,7 @@ func (hc *HTTPChallenge) Crawl(url string) []string {
 		time.Sleep(time.Duration(hc.options.SleepMillisecond) * time.Millisecond)
 	}
 	urls := []string{}
-	err := hc.browse.Open(url)
+	err := hc.browser.Open(url)
 	if err != nil {
 		return urls
 	}
@@ -153,13 +144,13 @@ func (hc *HTTPChallenge) Crawl(url string) []string {
 
 	color.Secondary.Print("Crawling")
 	color.Secondary.Print("....................")
-	if hc.browse.StatusCode() >= 400 {
-		color.Danger.Print(hc.browse.StatusCode())
+	if hc.browser.StatusCode() >= 400 {
+		color.Danger.Print(hc.browser.StatusCode())
 	} else {
-		color.Success.Print(hc.browse.StatusCode())
+		color.Success.Print(hc.browser.StatusCode())
 	}
 	color.Secondary.Println(" " + url)
-	rawBody := hc.browse.Body()
+	rawBody := hc.browser.Body()
 	emails := ExtractEmailsFromText(rawBody)
 	emails = FilterOutCommonExtensions(emails)
 	emails = UniqueStrings(emails)
@@ -171,4 +162,43 @@ func (hc *HTTPChallenge) Crawl(url string) []string {
 		for _, email := range emails {
 			color.Secondary.Print("                            📧 ")
 			color.Success.Println(email)
-		
+		}
+		fmt.Println()
+	}
+	if hc.options.WriteToFile != "" {
+		hc.Emails = append(hc.Emails, emails...)
+		hc.Emails = UniqueStrings(hc.Emails)
+	}
+
+	hc.browser.Find("a").Each(func(_ int, s *goquery.Selection) {
+		href, exists := s.Attr("href")
+		if !exists {
+			return
+		}
+		href = RelativeToAbsoluteURL(href, url, GetBaseURL(url))
+
+		if hc.options.IgnoreQueries {
+			href = RemoveAnyQueryParam(href)
+		}
+		href = RemoveAnyAnchors(href)
+		isSubset := IsSameDomain(hc.options.URL, href)
+		if !isSubset {
+			return
+		}
+		if hc.options.Depth != -1 {
+			depth := URLDepth(href, hc.options.URL)
+			if depth == -1 {
+				return
+			}
+			if depth == 0 {
+				return
+			}
+			if depth > hc.options.Depth {
+				return
+			}
+		}
+		urls = append(urls, href)
+	})
+	urls = UniqueStrings(urls)
+	return urls
+}
