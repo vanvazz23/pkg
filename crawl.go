@@ -3,6 +3,7 @@ package pkg
 import (
 	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -149,15 +150,13 @@ func (hc *HTTPChallenge) Crawl(url string) []string {
 		for _, email := range emails {
 			color.Secondary.Print("                            📧 ")
 			color.Success.Println(email)
-			if hc.options.WriteToFile != "" {
-				emailWriterChan <- email
-			}
 		}
 		fmt.Println()
 	}
 	if hc.options.WriteToFile != "" {
-		hc.Emails = append(hc.Emails, emails...)
-		hc.Emails = UniqueStrings(hc.Emails)
+		for _, email := range emails {
+			emailWriterChan <- email
+		}
 	}
 
 	// crawl the page and print all links
@@ -188,8 +187,4 @@ func (hc *HTTPChallenge) Crawl(url string) []string {
 				return
 			}
 		}
-		urls = append(urls, href)
-	})
-	urls = UniqueStrings(urls)
-	return urls
-}
+		urls = append(urls, href
