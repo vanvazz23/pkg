@@ -2,21 +2,21 @@ package pkg
 
 import (
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 )
 
-var emailWriterChan chan string // Channel to send extracted emails to the writer goroutine
-
+// ByteSliceToString converts a byte slice to a string.
 func ByteSliceToString(b []byte) string {
 	return string(b)
 }
 
+// StringToByteSlice converts a string to a byte slice.
 func StringToByteSlice(s string) []byte {
 	return []byte(s)
 }
 
+// IsSameDomain checks if two URLs belong to the same domain.
 func IsSameDomain(u1, u2 string) bool {
 	parsedURL1, err := url.Parse(u1)
 	if err != nil {
@@ -31,6 +31,7 @@ func IsSameDomain(u1, u2 string) bool {
 	return parsedURL1.Host == parsedURL2.Host
 }
 
+// URLDepth calculates the depth of a URL relative to a reference URL.
 func URLDepth(u, referenceURL string) int {
 	refURL, err := url.Parse(referenceURL)
 	if err != nil {
@@ -59,6 +60,7 @@ func URLDepth(u, referenceURL string) int {
 	return depth
 }
 
+// RemoveAnyQueryParam removes any query parameters from a URL.
 func RemoveAnyQueryParam(u string) string {
 	if strings.Contains(u, "?") {
 		return strings.Split(u, "?")[0]
@@ -66,6 +68,7 @@ func RemoveAnyQueryParam(u string) string {
 	return u
 }
 
+// RemoveAnyAnchors removes any anchors from a URL.
 func RemoveAnyAnchors(u string) string {
 	if strings.Contains(u, "#") {
 		return strings.Split(u, "#")[0]
@@ -73,6 +76,7 @@ func RemoveAnyAnchors(u string) string {
 	return u
 }
 
+// GetBaseURL extracts the base URL from a full URL.
 func GetBaseURL(u string) string {
 	parsedURL, err := url.Parse(u)
 	if err != nil {
@@ -81,6 +85,7 @@ func GetBaseURL(u string) string {
 	return parsedURL.Scheme + "://" + parsedURL.Host
 }
 
+// ExtractEmailsFromText extracts email addresses from a text using regular expressions.
 func ExtractEmailsFromText(text string) []string {
 	// Regular expression to match email addresses
 	re := regexp.MustCompile(`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`)
@@ -91,6 +96,7 @@ func ExtractEmailsFromText(text string) []string {
 	return emails
 }
 
+// RelativeToAbsoluteURL converts a relative URL to an absolute URL based on the current URL and base URL.
 func RelativeToAbsoluteURL(href, currentURL, baseURL string) string {
 	if strings.HasPrefix(href, "http") {
 		return href
@@ -104,47 +110,4 @@ func RelativeToAbsoluteURL(href, currentURL, baseURL string) string {
 	}
 
 	return currentURL + href
-}
-
-func CountPerDomain(emails []string) map[string]int {
-	domainCounts := make(map[string]int)
-
-	for _, email := range emails {
-		parts := strings.Split(email, "@")
-		if len(parts) == 2 {
-			domain := parts[1]
-			domainCounts[domain]++
-		}
-	}
-
-	return domainCounts
-}
-
-func IsAnAsset(url string) bool {
-	commonAssetExtensions := []string{".pdf", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".css", ".js", ".ico", ".pdf"}
-	for _, ext := range commonAssetExtensions {
-		if strings.HasSuffix(url, ext) {
-			return true
-		}
-	}
-	return false
-}
-
-func StartEmailWriter(filePath string) {
-	emailWriterChan = make(chan string)
-
-	go func() {
-		file, err := os.Create(filePath)
-		if err != nil {
-			panic(err)
-		}
-		defer file.Close()
-
-		for email := range emailWriterChan {
-			_, err := file.WriteString(email + "\n")
-			if err != nil {
-				panic(err)
-			}
-		}
-	}()
 }
