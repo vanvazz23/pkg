@@ -171,41 +171,4 @@ func (hc *HTTPChallenge) Crawl(url string) []string {
 		for _, email := range emails {
 			color.Secondary.Print("                            📧 ")
 			color.Success.Println(email)
-			emailWriterChan <- email // Write email to channel
-		}
-		fmt.Println()
-	}
-
-	// crawl the page and print all links
-	hc.browse.Find("a").Each(func(_ int, s *goquery.Selection) {
-		href, exists := s.Attr("href")
-		if !exists {
-			return
-		}
-		href = RelativeToAbsoluteURL(href, url, GetBaseURL(url))
-
-		if hc.options.IgnoreQueries {
-			href = RemoveAnyQueryParam(href)
-		}
-		href = RemoveAnyAnchors(href)
-		isSubset := IsSameDomain(hc.options.URL, href)
-		if !isSubset {
-			return
-		}
-		if hc.options.Depth != -1 {
-			depth := URLDepth(href, hc.options.URL)
-			if depth == -1 {
-				return
-			}
-			if depth == 0 {
-				return
-			}
-			if depth > hc.options.Depth {
-				return
-			}
-		}
-		urls = append(urls, href)
-	})
-	urls = UniqueStrings(urls)
-	return urls
-}
+		
