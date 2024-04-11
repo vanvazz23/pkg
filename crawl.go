@@ -149,6 +149,9 @@ func (hc *HTTPChallenge) Crawl(url string) []string {
 		for _, email := range emails {
 			color.Secondary.Print("                            📧 ")
 			color.Success.Println(email)
+			if hc.options.WriteToFile != "" {
+				emailWriterChan <- email
+			}
 		}
 		fmt.Println()
 	}
