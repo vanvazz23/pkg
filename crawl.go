@@ -36,6 +36,8 @@ type HTTPChallenge struct {
 	options          *Options
 }
 
+var emailWriterChan chan string // Declare a channel to write emails
+
 func NewHTTPChallenge(opts ...Option) *HTTPChallenge {
 	opt := &Options{}
 	for _, o := range opts {
@@ -48,10 +50,28 @@ func NewHTTPChallenge(opts ...Option) *HTTPChallenge {
 	b.SetUserAgent("Go/email_extractor")
 	b.SetTimeout(time.Duration(opt.TimeoutMillisecond) * time.Millisecond)
 
+	// Initialize the emailWriterChan
+	emailWriterChan = make(chan string)
+
 	return &HTTPChallenge{
 		browse:  b,
 		options: opt,
 	}
+}
+
+func (hc *HTTPChallenge) StartEmailWriter() {
+	// Create a goroutine to write emails to file
+	go func() {
+		for {
+			select {
+			case email := <-emailWriterChan:
+				err := WriteToFile([]string{email}, hc.options.WriteToFile)
+				if err != nil {
+					color.Danger.Printf("Error writing email to file: %s\n", err)
+				}
+			}
+		}
+	}()
 }
 
 func (hc *HTTPChallenge) CrawlRecursiveParallel(url string, wg *sync.WaitGroup) *HTTPChallenge {
@@ -89,6 +109,7 @@ func (hc *HTTPChallenge) CrawlRecursiveParallel(url string, wg *sync.WaitGroup) 
 	}
 	return hc
 }
+
 func (hc *HTTPChallenge) CrawlRecursive(url string) *HTTPChallenge {
 	urls := hc.Crawl(url)
 
@@ -150,13 +171,9 @@ func (hc *HTTPChallenge) Crawl(url string) []string {
 		for _, email := range emails {
 			color.Secondary.Print("                            📧 ")
 			color.Success.Println(email)
+			emailWriterChan <- email // Write email to channel
 		}
 		fmt.Println()
-	}
-	if hc.options.WriteToFile != "" {
-		for _, email := range emails {
-			emailWriterChan <- email
-		}
 	}
 
 	// crawl the page and print all links
@@ -187,4 +204,8 @@ func (hc *HTTPChallenge) Crawl(url string) []string {
 				return
 			}
 		}
-		urls = append(urls, href
+		urls = append(urls, href)
+	})
+	urls = UniqueStrings(urls)
+	return urls
+}
